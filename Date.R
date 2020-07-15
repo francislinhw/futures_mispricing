@@ -104,8 +104,8 @@ while (year<2016){
 setwd("C:\\Users\\Francis\\Desktop\\Nikkei")
 data1<-read.csv("BusinessDate.csv", header=T, sep=",",encoding = "UTF-8")  
 outt=structure(list(character()), class = "data.frame")
-for (i in 1:nrow(data1))
-{
+data1=SESE
+for (i in 1:nrow(data1)){
   YY=as.numeric(year(as.Date(data1[i,1],format='%m/%d/%Y')))
   Y=as.character(YY)
   #if (year(as.Date(data1[i,1],format='%m/%d/%Y'))==YY){
@@ -674,8 +674,26 @@ kurtosis(tata$FUTURESRET,na.rm = TRUE)
 
 
 #R定義的kurtosis好像與論文中的不大一樣 所以這邊的就當作參考就好了 ，驗證資料還是放在excel中
-
-
-
+#Dividend Payment Appened=====================================================================
+#tata$AVEDIV=0
+DIV=c(146.05,146.05,146.05,123.06,115.13,89.17,85.45,91.77,108.20,136.76,177.03,211.18,219.73,162.18,175.59,192.03,207.92,226.73,265.12)
+APPENDIV<-function(When=JUNEDATE,Main=tata,howmuch=DIV,N=10){
+  S=0
+  
+  for (i in (1:nrow(Main))){
+    
+    for(j in (1:nrow(When))){
+      if(as.Date(Main[i,1],'%m/%d/%Y')==as.Date(When[j,1],'%Y-%m-%d')){
+        S=S+1
+        for(k in (0:(N-1))){Main$AVEDIV[i+k]=howmuch[S]}
+      }else{next}
+    }
+  }
+  return(Main)
+}
+#==================================
+SESE$Maturity=outt
+SESE$SPOTRET[4554]=0.003121999220976130
+SESE$FUTURESRET[4554]=0.00056495
 
 

@@ -498,7 +498,182 @@ install.packages('coxme')
 library(coxme)
 
 summary(model2)
+#Nikkei Project Objects  
+#=================================Function of Rolling business day f(Today,How many business day we like to add, after n business day date)
+#可以給出幾個非例行假日後的日期
+RollBD_Forward<-function(datedef='06/01/2020',n=10){
+  library(lubridate)
+  library(timeDate)
+  #未來可以加上日期格式判斷'%m/%d/%Y'
+  N=as.numeric(n)-1
+  datedef=as.character(datedef)
+  D=as.Date(datedef,format='%m/%d/%Y')
+  i=0
+  
+  while (i<=N) {
+    if (weekdays(D)!="Saturday"& weekdays(D)!="Sunday"&i!=N){
+      
+        i = i + 1
+        D = 1 + D
+      
+      }else if(weekdays(D)!="Saturday"&weekdays(D)!="Sunday"&i==N){
+        
+        DF=D
+        i = i + 1
+        
+      }else{
+        
+        D=D+1
+        
+      }
+  }
+  return(DF)
+}
+#===========================================================
+RollBD_Backward<-function(datedef='12/31/2019',n=10){
+  library(lubridate)
+  library(timeDate)
+  #未來可以加上日期格式判斷'%m/%d/%Y'
+  N=as.numeric(n)-1
+  datedef=as.character(datedef)
+  D=as.Date(datedef,format='%m/%d/%Y')
+  i=0
+  
+  while (i<=N) {
+    if (weekdays(D)!="Saturday"& weekdays(D)!="Sunday"&i!=N){
+      
+      i = i + 1
+      D = D - 1
+      
+    }else if(weekdays(D)!="Saturday"&weekdays(D)!="Sunday"&i==N){
+      
+      DF=D
+      i = i + 1
+      
+    }else{
+      
+      D = D - 1
+      
+    }
+  }
+  return(DF)
+}
+#架構就是要先生出對於每個日期都可以判斷 我就只是想知道頭尾 如果是business day 我就加上1直到加上10就會跳到下一天
+#分成從Target Maturity Date > date series 小於上面函數弄出來的日期就可以加上股利並且
+#=======================判斷是否為周一周五或周末
+IFBD_bool<-function(datedef='12/31/2019'){
+  library(lubridate)
+  library(timeDate)
+  #未來可以加上日期格式判斷'%m/%d/%Y'
+  datedef=as.character(datedef)
+  if(weekdays(D)!="Saturday"& weekdays(D)!="Sunday"){i=1}
+  else{i=0}
+  return(i)
+}
+#=========================================================刪除資料中非Business Day 的日子
 
+#=========================================================
+#找出六月份前十天 十二月後十天
+FindJune_Howmany_Forward<-function(Month=6,N=10,datelist=dataose$Date){
+  
+  datelist=as.array(datelist)
+  datelist=as.Date(datelist,format='%m/%d/%Y')
+  StartYear=year(as.Date(datelist[1],format='%m/%d/%Y'))
+  EndYear=year(as.Date(datelist[length(datelist)],format='%m/%d/%Y'))
+  M=abs(StartYear-EndYear)+1
+  SS=1
+  TargetDate=structure(character(), class = "data.frame")
+  for (i in (1:length(datelist))) {
+    if (month(datelist[i])==Month & month(datelist[i+N-1])==Month & month(datelist[i+N])!=Month){
+      SS=SS+1
+      TargetDate[SS-1,1] = as.character(datelist[i])
+      if(SS==M){break}
+    }else{next}
+  }
+  return(TargetDate)
+}
+#==========================================================
+#找出六月份前十天 十二月後十天
+FindJune_Howmany_Backward<-function(Month=12,N=10,datelist=dataose$Date){
+  datelist=as.array(datelist)
+  datelist=as.Date(datelist,format='%m/%d/%Y')
+  StartYear=year(as.Date(datelist[1],format='%m/%d/%Y'))
+  EndYear=year(as.Date(datelist[length(datelist)],format='%m/%d/%Y'))
+  M=abs(StartYear-EndYear)+2
+  SS=1
+  TargetDate=structure(character(), class = "data.frame")
+  for (i in (1:length(datelist))){
+    if(i<=N){
+      if(i==1){
+        SS=SS+1
+        TargetDate[SS-1,1] = as.character(datelist[i])
+      }else{next}
+    }else{
+      if(month(datelist[i])==Month & month(datelist[i-1])!=Month & month(datelist[i+N-1])==Month){
+          SS=SS+1
+          TargetDate[SS-1,1] = as.character(datelist[i])
+          if(SS==M){break}
+        }else{next}
+       }
+      }
+  return(TargetDate)
+}
+#=========================================================
+#對於每個日期計算股利 先檢查該到期日是否在股利發放日中 6/1-6/10  12/31 -12/20 roughly 
+UnderlyingDiv<-function(datedef=c('12/30/2019','12/31/2019'),divlist=c(200,200)){
+  library(lubridate)
+  library(timeDate)
+  #未來可以加上日期格式判斷'%m/%d/%Y'
+  for (i in (1:length(datedef))) {
+    maturity=
+    for (j in length(datedef)) {
+            
+    }
+  }
+  datedef=as.character(datedef)
+  if(weekdays(D)!="Saturday"& weekdays(D)!="Sunday"){i=1}
+  else{i=0}
+  return(i)
+}
+#=====================================================判斷Nikkei的放假日，剔除放假的資料
+BDseries<-function(dataseries=OSE0715){
+  #資料的第一個column是日期 第二個是市價資料 當前後兩天市價資料一樣我們當作是假日
+  p=0
+  deletarray<-structure(numeric(), class = "numeric")
+  N=nrow(dataseries)-1
+  for (i in (1:N)){
+    HD=log(as.numeric(dataseries[i,2])/as.numeric(dataseries[i+1,2]))
+    HDF=log(as.numeric(dataseries[i,3])/as.numeric(dataseries[i+1,3]))
+    dataseries[i,4]<-HD
+    dataseries[i,5]<-HDF
+    if(HD==0){
+      p = p + 1
+      deletarray[p]=-i
+    }else{next}
+  }
+  colnames(dataseries)[1]='Date'
+  colnames(dataseries)[4]='SPOTRET'
+  colnames(dataseries)[5]='FUTURESRET'
+  dataseries1=dataseries[deletarray,]
+  return(dataseries1)
+}
+
+#======================================2020/7/15 OSE
+setwd("C:\\Users\\Francis\\Desktop\\Nikkei")
+OSE0715<-read.csv("715OSESPOT.csv", header=T, sep=",",encoding = "UTF-8") 
+
+mean(tata$SPOTRET,na.rm =TRUE)
+sd(tata$SPOTRET,na.rm = TRUE)
+skewness(tata$SPOTRET,na.rm = TRUE)
+kurtosis(tata$SPOTRET,na.rm = TRUE)
+
+mean(tata$FUTURESRET,na.rm =TRUE)
+sd(tata$FUTURESRET,na.rm = TRUE)
+skewness(tata$FUTURESRET,na.rm = TRUE)
+kurtosis(tata$FUTURESRET,na.rm = TRUE)
+
+
+#R定義的kurtosis好像與論文中的不大一樣 所以這邊的就當作參考就好了 ，驗證資料還是放在excel中
 
 
 

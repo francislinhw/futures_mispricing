@@ -1,5 +1,6 @@
 library(lubridate)
 library(timeDate)
+library(dplyr)
 setwd("\\Users\\Francis\\Desktop\\NIkkei")
 date<-dmy_hms("01–12–2018")
 date
@@ -580,7 +581,7 @@ FindJune_Howmany_Forward<-function(Month=6,N=10,datelist=dataose$Date){
   datelist=as.Date(datelist,format='%m/%d/%Y')
   StartYear=year(as.Date(datelist[1],format='%m/%d/%Y'))
   EndYear=year(as.Date(datelist[length(datelist)],format='%m/%d/%Y'))
-  M=abs(StartYear-EndYear)+1
+  M=abs(StartYear-EndYear)+2
   SS=1
   TargetDate=structure(character(), class = "data.frame")
   for (i in (1:length(datelist))) {
@@ -592,19 +593,21 @@ FindJune_Howmany_Forward<-function(Month=6,N=10,datelist=dataose$Date){
   }
   return(TargetDate)
 }
+#---------------SAVE
+saveRDS(JUNEDAY,'JUNEDAY.rds')
 #==========================================================
 #找出六月份前十天 十二月後十天
-FindJune_Howmany_Backward<-function(Month=12,N=10,datelist=dataose$Date){
+FindJune_Howmany_Backward<-function(Month=12,N=10,datelist=dataose$Date,ifaddone=1){
   datelist=as.array(datelist)
   datelist=as.Date(datelist,format='%m/%d/%Y')
   StartYear=year(as.Date(datelist[1],format='%m/%d/%Y'))
   EndYear=year(as.Date(datelist[length(datelist)],format='%m/%d/%Y'))
-  M=abs(StartYear-EndYear)+2
+  M=abs(StartYear-EndYear)+1+ifaddone
   SS=1
   TargetDate=structure(character(), class = "data.frame")
   for (i in (1:length(datelist))){
     if(i<=N){
-      if(i==1){
+      if(i==1 & month(as.Date(datelist[i],'%m/%d/%Y'))==Month){
         SS=SS+1
         TargetDate[SS-1,1] = as.character(datelist[i])
       }else{next}
@@ -618,6 +621,8 @@ FindJune_Howmany_Backward<-function(Month=12,N=10,datelist=dataose$Date){
       }
   return(TargetDate)
 }
+#------------------------------SAVE
+saveRDS(DECDATE,'DECDATE.rds')
 #=========================================================
 #對於每個日期計算股利 先檢查該到期日是否在股利發放日中 6/1-6/10  12/31 -12/20 roughly 
 UnderlyingDiv<-function(datedef=c('12/30/2019','12/31/2019'),divlist=c(200,200)){
@@ -644,16 +649,16 @@ BDseries<-function(dataseries=OSE0715){
   for (i in (1:N)){
     HD=log(as.numeric(dataseries[i,2])/as.numeric(dataseries[i+1,2]))
     HDF=log(as.numeric(dataseries[i,3])/as.numeric(dataseries[i+1,3]))
-    dataseries[i,4]<-HD
-    dataseries[i,5]<-HDF
+    dataseries[i,5]<-HD
+    dataseries[i,6]<-HDF
     if(HD==0){
       p = p + 1
       deletarray[p]=-i
     }else{next}
   }
   colnames(dataseries)[1]='Date'
-  colnames(dataseries)[4]='SPOTRET'
-  colnames(dataseries)[5]='FUTURESRET'
+  colnames(dataseries)[5]='SPOTRET'
+  colnames(dataseries)[6]='FUTURESRET'
   dataseries1=dataseries[deletarray,]
   return(dataseries1)
 }
@@ -676,7 +681,30 @@ kurtosis(tata$FUTURESRET,na.rm = TRUE)
 #R定義的kurtosis好像與論文中的不大一樣 所以這邊的就當作參考就好了 ，驗證資料還是放在excel中
 #Dividend Payment Appened=====================================================================
 #tata$AVEDIV=0
-DIV=c(146.05,146.05,146.05,123.06,115.13,89.17,85.45,91.77,108.20,136.76,177.03,211.18,219.73,162.18,175.59,192.03,207.92,226.73,265.12)
+tata$AVEDIV=0
+#--------------7/24
+SET1$AVEDIV=0
+View(SET1)
+DIV=c(258.2364945,
+      223.0606165,
+      203.2569545,
+      191.9618111,
+      174.7508693,
+      161.4132642,
+      221.1700558,
+      209.578816,
+      170.9319111,
+      133.2415261,
+      104.4098509,
+      90.5912904,
+      81.74881455,
+      87.70405578,
+      87.70455978,
+      79.6188997,
+      86.36129863,
+      91.20148898,
+      86.9324615
+)
 APPENDIV<-function(When=JUNEDATE,Main=tata,howmuch=DIV,N=10){
   S=0
   
@@ -691,9 +719,1236 @@ APPENDIV<-function(When=JUNEDATE,Main=tata,howmuch=DIV,N=10){
   }
   return(Main)
 }
+#====================================
+JUNEDATE=FindJune_Howmany_Backward()
 #==================================
 SESE$Maturity=outt
 SESE$SPOTRET[4554]=0.003121999220976130
 SESE$FUTURESRET[4554]=0.00056495
+SESE$AVEDIV=SESE$AVEDIV/20
+write.csv(SESE,file = "Current2.csv",row.names=T,sep="\t") 
+write.table(SESE,file="ir.txt",sep=",",row.names = F,col.names = T)
+saveRDS(SESE,"SESE017.rds")
+SE=readRDS("SESE017.rds")
+
+as.Date(SESE$Date[1],'%m/%d/%Y')
+
+#=================================================================
+#Extracting the payout dividends date from series
+#=================================================================
+# Usage: variables : series = your data with div and time
+# d = Which column is Dividend e.g 3.34 ($)omitted 
+# T = Which column is Date     e.g 2012/3/3
+# Output will be a date serie of all dividends paying date
+
+EXTRACTDIV<-function(SERIES=SESE,d=7,t=1){
+  DIVSE<-structure(list(character()), class = "data.frame")
+  j=0
+  for (i in (1:nrow(SERIES))) {
+    if(SERIES[i,d]!=0){
+     j <- j + 1
+     DIVSE[j,1] <- as.character(SERIES[i,t])
+    }
+  }
+colnames(DIVSE)<-"DIVDATE"
+return(DIVSE)
+}
+#=================================================================
+# CrossDay Function to calculate how much dividends days passed
+#=================================================================
+#
+#
+#Previous Setting in case error
+SESE$Divs=0
+#------------------
+CrossDay=function(Main=SESE,d=7,Start = SESE$Date, End=SESE$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y'){
+  COC=0
+  for(i in (1:nrow(Main))){
+    for(j in (1:nrow(Divdata))){
+      if((as.Date(Start[i],startformat)<=as.Date(Divdata[j,1],Divformat)) & (as.Date(as.character(End[i]),endformat)>=as.Date(Divdata[j,1],Divformat))){
+        COC <- 1 + COC
+        #print(COC)
+        if(j==nrow(Divdata)){Main$Divs[i] <- COC}
+      }else if(j==nrow(Divdata)){
+        Main$Divs[i] <- COC
+        }else{next}
+      
+    }
+    COC<-0
+  }
+  return(Main)  
+}
+#------------------Implementing code
+SET=CrossDay()
+#================================================================
+# Outt to SESE
+#================================================================
+for (i in (1:nrow(outt))) {
+  SESE$Maturity[i]=outt[i,1]
+}
+#================================================================
+#SAVE RDS 7/18 
+#================================================================
+saveRDS(SET,"NIKKEI0726.rds")
+
+#================================================================
+# Day Count Convention & Day Count faction
+#================================================================
+#calculate accrual day Convention : ACT/360, 30/360,and BD/360
+#Main Data contain accrual start and end dates
+#S(E)=indicate at which column is start(End) date in Main data
+
+DCF=function(Convention='ACT/365',maindata=SET,S=1,E=8,SC='%m/%d/%Y',EC='%Y-%m-%d'){
+  maindata[,S]<- as.character(maindata[,S])
+  maindata[,E]<- as.character(maindata[,E])
+  switch (Convention,
+    'ACT/365' = for (i in (1:nrow(maindata))){maindata$'T-t'[i]<-(as.Date(maindata[i,E],EC)-as.Date(maindata[i,S],SC))/365}
+  )
+  return(maindata)
+}
 
 
+#----------save
+saveRDS(SET,"NIKKEI0719.rds")
+write.csv(SET,file = "Current progress.csv",row.names=F)
+#----------------To start from this day's Data
+dat <- read.csv("ACS.csv", header=TRUE)
+SET <- readRDS("NIKKEI0726.rds")
+View(SET)
+SET$AVEDIV<-SET$AVEDIV/20
+
+#================================================================
+# COC1 : FTt = St * e^((rt-dt)*(T-t))
+#================================================================
+#Divs is DIV data like DIV <- c(134,334,445 ... )
+#Main is a dataset including date column to which dividends are expected to append.
+#T is at which column is date(in this case is 1)
+#DIV adjustments
+DIVRATE=function(Divs=DIV,Main=SET,T=1){
+  StartYear=year(as.Date(Main[1,1],format='%m/%d/%Y'))
+  
+  d=length(Divs)
+  for (i in (1:nrow(Main))) {
+    if(i==1){
+      Main$DIVR[i] <- DIV[d]/Main$SPOT[i]
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))==year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      Main$DIVR[i] <- DIV[d]/Main$SPOT[i]
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))!=year(as.Date(Main[i-1,t],format='%m/%d/%Y'))){
+      d = d - 1
+      Main$DIVR[i] <- DIV[d]/Main$SPOT[i]
+    }
+  }
+  return(Main)
+}
+#----------COC1
+COC1=function(Main=SET2,S=2,F=1,M=8,R=4,D=11,T=10,FP=3){
+  Main$COC1=0
+  Main$MisCOC1=0
+  for (i in (1:nrow(Main))) {
+    Main$COC1[i] <- as.numeric(Main[i,S]*exp((Main[i,R]-Main[i,D])*Main[i,T]))
+    Main$MisCOC1[i] <- as.numeric((Main$COC1[i]-Main[i,FP])/Main[i,S])
+  }
+  return(Main)
+}
+
+#--------------------------------------COC1 Revised Version------------------------------------
+#Prepare Div from Bloomberg Nikkei 225 Yield 
+DIVR<-c(1.4798 #From 2014...
+,1.3692
+,1.9553
+,2.2703
+,1.7084
+,1.5305
+,2.4964
+,1.3691
+,0.9923
+,0.827
+,0.9088
+,0.8485
+,0.9529
+,0.8319
+,0.6362
+,0.4205
+,0.6239
+,0.5977
+,0.449)#To 1996 #7/24 update divdends data
+
+DIVR<-DIVR*0.01 # Convert to Percentage
+
+View(DIVR)
+#--------lateast version
+#
+#
+#建議可以加上順或是反14-96 or 96-14可以用+-1來表示
+#
+RevisedCOC1=function(Divs=DIVR,Main=SET,T=1,R=4,FP=3,DU=10,S=2){
+  StartYear=year(as.Date(Main[1,1],format='%m/%d/%Y'))
+  Main$DIVR <-0 
+  Main$COC1 <-0 
+  Main$MisCOC1 <-0 
+  d=1
+  for (i in (1:nrow(Main))) {
+    if(i==1){
+      Main$DIVR[i] <- Divs[d]
+      Main$COC1[i] <- as.numeric(Main[i,S]*exp((0.01*Main[i,R]-Main$DIVR[i])*Main[i,DU]))
+      Main$MisCOC1[i] <- as.numeric(-(Main$COC1[i]-Main[i,FP])/Main[i,S])
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))==year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      Main$DIVR[i] <- Divs[d]
+      Main$COC1[i] <- as.numeric(Main[i,S]*exp((0.01*Main[i,R]-Main$DIVR[i])*Main[i,DU]))
+      Main$MisCOC1[i] <- as.numeric(-(Main$COC1[i]-Main[i,FP])/Main[i,S])
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))!=year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      d = d + 1
+      Main$DIVR[i] <- Divs[d]
+      Main$COC1[i] <- as.numeric(Main[i,S]*exp((0.01*Main[i,R]-Main$DIVR[i])*Main[i,DU]))
+      Main$MisCOC1[i] <- as.numeric(-(Main$COC1[i]-Main[i,FP])/Main[i,S])
+    }
+  }
+  return(Main)
+}
+
+#------------------------------------------------------SAVE
+saveRDS(SET1,"COC1_REVISED.rds")
+#====================Statistic Summary
+D2014=filter(SET1,Date=='12/30/2014')
+write.csv(SET1,'COC1REVISED.csv')
+
+
+SET1[SET1["Divs"]>1]
+#================================================================
+# Use Dividend Yield to generate DIV series 
+#================================================================
+#
+#
+#closing price method
+DivYieldDIV <- function(Divs=DIVR,Main=SET1,T=1,S=2){
+  StartYear <- year(as.Date(Main[1,1],format='%m/%d/%Y'))
+  Result <- structure(array(numeric()), class = "array")
+  d <- 0
+  for (i in (1:nrow(Main))) {
+    if(i==1){
+      Stock <- Main[i,S]
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))==year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      next
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))!=year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      d = d + 1
+      print(Stock)
+      Result[d] <- Divs[d]*Stock
+      Stock <- Main[i,S]
+      print(Result[d])
+    }
+  }
+  return(Result)
+}
+#--------------------------------
+ReDIV_closing<-DivYieldDIV()
+saveRDS(ReDIV_closing,"ReDIV_closing.rds")
+readRDS("ReDIV_closing.rds")
+#-------------Average Price Method----------------------------------
+DivYieldDIV_AVE <- function(Divs=DIVR,Main=SET1,T=1,S=2){
+  StartYear <- year(as.Date(Main[1,1],format='%m/%d/%Y'))
+  Result <- structure(array(numeric()), class = "array")
+  d <- 0
+  j <- 0
+  for (i in (1:nrow(Main))) {
+    if(i==1){
+      Stocksum <- Main[i,S]
+      j <- j + 1
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))==year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      Stocksum <- Stocksum + Main[i,S]
+      j <- j + 1
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))!=year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      d = d + 1
+      print(Stocksum)
+      Result[d] <- Divs[d]*Stocksum/(j)
+      Stocksum <- Main[i,S]
+      j <- 1
+      print(Result[d])
+    }
+  }
+  return(Result)
+}
+#----------------------------------------------------------------
+ReDIV_AVE <- DivYieldDIV_AVE()
+#================================================================
+# COC2 : FTt = St * e^(rt*(T-t)) - /Sigma^T_t {Dp*e^((rp)*(T-p))} 
+#================================================================
+# 
+# 
+# 
+#Previous CrossDay for reference
+
+#------------------
+COC2 <- function(Main=SET1){
+  
+  Main$MisCOC2 <- 0
+  for (i in (1:nrow(Main))) {
+    sumDiv = 0
+    k=0
+    j=1
+    if(Main[i,9] != 0){
+      while (j < Main[i,9]+1) {
+        k = k + 1
+        if(Main[i-k+1,7]!=0){
+          j = j + 1
+          DCF = abs(as.numeric(as.Date(Main[i,8],'%Y-%m-%d') - as.Date(Main[i-k+1,1],'%m/%d/%Y')))/360
+          sumDiv = Main[i-k+1,7]*exp(Main[i-k+1,4]*DCF) + sumDiv
+          #print(sumDiv)
+        }else{next}
+      }
+      
+      Main$COC2[i] <- Main[i,2]*exp(Main[i,4]*as.numeric(Main[i,10]))-sumDiv
+      Main$MisCOC2[i] <- as.numeric((Main$COC2[i]-Main[i,3])/Main[i,2])
+    }else{
+      Main$COC2[i] <- Main[i,2]*exp(Main[i,4]*as.numeric(Main[i,10]))
+      Main$MisCOC2[i] <- as.numeric((Main$COC2[i]-Main[i,3])/Main[i,2])
+    }
+  }
+  return(Main)
+}
+#----------------------------------------Generalized-----------------------------------
+COC2G <- function(Main=SET1,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1){
+  Main$COC2T1 <- 0
+  Main$COC2T2 <- 0
+  Main$COC2 <- 0
+  Main$MisCOC2 <- 0
+  for (i in (1:nrow(Main))) {
+    sumDiv = 0
+    k=0
+    j=1
+    if(Main[i,Divs] != 0){
+      while (j < Main[i,Divs]+1) {
+        k = k + 1
+        if(Main[i-k+1,AVEDIV]!=0){
+          j = j + 1
+          DCF = abs(as.numeric(as.Date(Main[i,Ma],'%Y-%m-%d') - as.Date(Main[i-k+1,T],'%m/%d/%Y')))/365
+          sumDiv = Main[i-k+1,AVEDIV]*exp(0.01*Main[i-k+1,rf]*DCF) + sumDiv
+          #print(sumDiv)
+        }else{next}
+      }
+      Main$COC2T1[i]<- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))
+      Main$COC2T2[i]<- sumDiv
+      Main$COC2[i] <- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))-sumDiv
+      Main$MisCOC2[i] <- as.numeric(-(Main$COC2[i]-Main[i,Fu])/Main[i,S])
+    }else{
+      Main$COC2T1[i]<- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))
+      Main$COC2T2[i]<- 0
+      Main$COC2[i] <- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))
+      Main$MisCOC2[i] <- as.numeric(-(Main$COC2[i]-Main[i,Fu])/Main[i,S])
+    }
+  }
+  return(Main)
+}
+#===============False approach============to duplicate paper result=========
+for (i in (1:nrow(SET1))){
+  if(month(as.Date(SET1$Date[i],'%m/%d/%Y'))==1 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==2 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==3 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==4 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==5 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==7 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==8 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==9 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==10 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==11){
+    SET1$Divs[i] <- 0
+  }
+}
+j=0
+for(i in (1:nrow(SET1))){
+  YY=as.numeric(month(as.Date(SET1$Date[i],'%m/%d/%Y')))
+  if(YY==12){
+    if(SET1$AVEDIV[i]!=0){
+      j=j+1
+    }else if(j >= 10){
+      SET1$Divs[i]=0
+    }else{next}
+  
+  }else{
+      j=0
+    }
+}
+
+FCOC2G <- function(Main=SET1,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1){
+  Main$COC2T1 <- 0
+  Main$COC2T2 <- 0
+  Main$COC2 <- 0
+  Main$MisCOC2 <- 0
+  for (i in (1:nrow(Main))) {
+    sumDiv = 0
+    k=0
+    j=1
+    if(Main[i,Divs] != 0){
+      while (j < Main[i,Divs]+1) {
+        k = k + 1
+        if(Main[i-k+1,AVEDIV]!=0){
+          j = j + 1
+          DCF = abs(as.numeric(as.Date(Main[i,Ma],'%Y-%m-%d') - as.Date(Main[i-k+1,T],'%m/%d/%Y')))/360
+          sumDiv = Main[i-k+1,AVEDIV]*exp(0.01*Main[i-k+1,rf]*DCF) + sumDiv
+          #print(sumDiv)
+        }else{next}
+      }
+      Main$COC2T1[i]<- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))
+      Main$COC2T2[i]<- sumDiv
+      Main$COC2[i] <- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))-sumDiv
+      Main$MisCOC2[i] <- as.numeric(-(Main$COC2[i]-Main[i,Fu])/Main[i,S])
+    }else{
+      Main$COC2T1[i]<- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))
+      Main$COC2T2[i]<- 0
+      Main$COC2[i] <- Main[i,S]*exp(0.01*Main[i,rf]*as.numeric(Main[i,DF]))
+      Main$MisCOC2[i] <- as.numeric(-(Main$COC2[i]-Main[i,Fu])/Main[i,S])
+    }
+  }
+  return(Main)
+}
+#---------------------------SAVE--------------------------------------------
+saveRDS(SET3,"REVISEDCOC1&2.rds")
+write.csv(SET3,file = "RevisedCOC12.csv",row.names=F)
+SET3<-readRDS("REVISEDCOC1&2.rds")
+#-------------------
+saveRDS(SET2,"REVISEDCOC1&2726.rds")
+write.csv(SET3,file = "726neg.csv",row.names=F)
+#---------Data processing-------------------------------
+YEARFUN <- function(Main = SET3){
+  Main$YEAR=""
+  for (i in (1:nrow(Main))) {
+    Main$YEAR[i] <- as.character(year(as.Date(Main$Date[i],'%m/%d/%Y')))
+  }
+  return(Main)
+}
+SETYEAR<-YEARFUN(SET2)
+SET2014=filter(SETYEAR, YEAR == "2014")
+
+MainSUM=function(Main=SETYEAR){
+  N=2014-1996+1
+  for (i in (1:N)) {
+    YEARR=1996+i-1
+    #YEARR=as.character(YEAR)
+    NOW=filter(Main,YEAR == YEARR)
+    NUMBER=filter(NOW,MisCOC2>0)
+    NUMBER2=filter(NOW,MisCOC2<=0)
+    E=as.numeric(nrow(NOW))-as.numeric(nrow(NUMBER))
+    print(YEARR)
+    print('StD MisCOC2:')
+    print(sd(NOW$MisCOC2))
+    print('Average MisCOC2:')
+    print(mean(NOW$MisCOC2))
+    print('Number of non negative:')
+    print(nrow(NUMBER))
+    print('Mean of non negative:')
+    print(mean(NUMBER$MisCOC2))
+    print('Number negative:')
+    print(E)
+    print('Mean of negative:')
+    print(mean(NUMBER2$MisCOC2))
+  }
+}
+#-----------------------Extract MISCOC summary statistics by year
+
+MISSUMM <- function(Divs=DIVR,Main=SETYEAR,T=1,S=2,MIS2=15){
+  Result <- structure(array(numeric()), class = "array")
+  d <- 0
+  j <- 0
+  for (i in (1:nrow(Main))) {
+    if(i==1){
+      Stocksum <- Main[i,MIS2]
+      j <- j + 1
+      print(Main[i,T])
+    }else if(i==nrow(Main)){
+      d <- d + 1
+      j <- j + 1
+      print(j)
+      Result[d] <- Divs[d]*Stocksum/(j)
+      print(Result[d])
+      
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))==year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      Stocksum <- Stocksum + Main[i,MIS2]
+      j <- j + 1
+    }else if(year(as.Date(Main[i,T],format='%m/%d/%Y'))!=year(as.Date(Main[i-1,T],format='%m/%d/%Y'))){
+      d <- d + 1
+      
+      
+      print(j)
+      Result[d] <- Divs[d]*Stocksum/(j)
+      print(Result[d])
+      print(Main[i,T])
+      Stocksum <- Main[i,MIS2]
+      j <- 1
+      
+    }
+  }
+  return(Result)
+}
+#=================Run below to get log
+MISSUMM()
+#============7/26 發現錯誤 AVEDIV未更新
+write.table(SET4,file="C://Users//Francis//Desktop//726updatecoc1.csv",sep=",",row.names=F, na = "NA")
+
+#----------------draft---------------------------------
+appendefalse=c(10,9,8,7,6,5,4,3,2,1)
+d = 0
+SET1$Divs=0
+
+for (i in (1:nrow(SET1))) {
+  if(SET1$AVEDIV[i]!=0){
+    d = d + 1
+    j = d%%10
+    if(j==0){j=10}
+    
+    SET1$Divs[i]=appendefalse[j]
+  }else{next}
+  
+}
+
+write.csv(SET3,file = "False.csv",row.names=F)
+saveRDS(SETYEAR,'731complete.rds')
+
+
+#===================8/1==================
+setwd("C:\\Users\\Francis\\Desktop\\Nikkei")
+SET=readRDS('8m1dSETupdate5.rds')
+SETupdate=DCF() # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+DECDATE<-FindJune_Howmany_Forward(Month = 12,N=10,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+#1417
+SETupdate2=APPENDIV(When=DECDATE,Main=SETupdate,howmuch=DIV,N=10,excludelast = 0)
+SETupdate3=APPENDIV(When=JUNEDATE,Main=SETupdate2,howmuch=DIV,N=10,excludelast = 0)
+
+View(SETupdate3)
+
+for(i in (1)){
+  SETupdate3$AVEDIV[4555-i]<-86.93246
+}
+
+saveRDS(SETupdate3,'SETupdate3.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate3,d=7,t=1)
+SETupdate4=CrossDay(Main=SETupdate3,d=7,Start = SETupdate3$Date, End=SETupdate3$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate4,'8m1dSETupdate4.rds')
+DIVR<-c(1.4798 #From 2014...
+        ,1.3692
+        ,1.9553
+        ,2.2703
+        ,1.7084
+        ,1.5305
+        ,2.4964
+        ,1.3691
+        ,0.9923
+        ,0.827
+        ,0.9088
+        ,0.8485
+        ,0.9529
+        ,0.8319
+        ,0.6362
+        ,0.4205
+        ,0.6239
+        ,0.5977
+        ,0.449)#To 1996 #7/24 update divdends data
+DIVR<-DIVR*0.01 # Convert to Percentage
+View(SETupdate4)
+
+SETupdate4$AVEDIV=SETupdate4$AVEDIV/20
+SETupdate5=RevisedCOC1(Divs=DIVR,Main=SETupdate4,T=1,R=4,FP=3,DU=10,S=2)
+saveRDS(SETupdate5,'8m1dSETupdate5.rds')
+SETupdate5=readRDS('8m1dSETupdate5.rds')
+SETupdate6=COC2G(Main=SETupdate5,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate6)
+Part2day3=Setdummy(Direction=1,Main=SETupdate6,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta3')
+Part2day3=Setdummy(Direction=1,Main=Part2day3,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta9')
+
+
+View(Part2day3)
+regressor_part8d4= lm(MisCOC2 ~ beta3+beta9 ,data = Part2day3)
+summary(regressor_part8d4)
+
+SETYEAR2<-YEARFUN(SETupdate6)
+MainSUM(SETYEAR2)
+write.csv(SETupdate6,file = "correct version.csv")
+View(SETupdate5)
+
+SET1=SETupdate5
+
+for (i in (1:nrow(SET1))){
+  if(month(as.Date(SET1$Date[i],'%m/%d/%Y'))==1 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==2 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==3 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==4 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==5 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==7 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==8 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==9 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==10 | month(as.Date(SET1$Date[i],'%m/%d/%Y'))==11){
+    SET1$Divs[i] <- 0
+  }
+}
+View(SET1)
+j=0
+for(i in (1:nrow(SET1))){
+  YY=as.numeric(month(as.Date(SET1$Date[i],'%m/%d/%Y')))
+  if(YY==6){
+    if(SET1$AVEDIV[i]!=0){
+      j=j+1
+    }else if(j >= 10){
+      SET1$Divs[i]=0
+    }else{next}
+    
+  }else{
+    j=0
+  }
+}
+View(SET1)
+SETupdate8=COC2G(Main=SET1,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+SETYEAR<-YEARFUN(SETupdate8)
+MainSUM()
+saveRDS(SETupdate8,'8m1dSETupdate8.rds')
+write.csv(SETupdate8,file = "Qin's Corrected version.csv") 
+View(SETupdate8)
+#============regresssion 8/1==========
+SETupdate8RE<-read.csv("SETupdate8RE.csv", header=T, sep=",",encoding = "UTF-8")
+SETupdate8RE<-read.csv("correct version.csv", header=T, sep=",",encoding = "UTF-8")
+SETupdate8RE<-read.csv("Qin's Corrected version.csv", header=T, sep=",",encoding = "UTF-8")
+View(SETupdate8RE)
+regressor = lm(MisCOC2 ~ Beta1+Beta2+Beta3+Beta4+Beta5+Beta6+Beta7+Beta8+Beta9+Beta10+Beta11+Beta12+Beta13+Beta14+Beta15+Beta16+Beta17+Beta18+Beta19+Beta20 ,data = SETupdate8RE)
+regressor1 = lm(MisCOC2 ~ Beta1+Beta2+Beta3+Beta4+Beta5+Beta6+Beta7+Beta8+Beta9+Beta10 ,data = SETupdate8RE)
+regressor2 = lm(MisCOC2 ~ Beta11+Beta12+Beta13+Beta14+Beta15+Beta16+Beta17+Beta18+Beta19+Beta20 ,data = SETupdate8RE)
+summary(regressor) 
+summary(regressor1)
+summary(regressor2) 
+saveRDS(regressor,'regressor.rds')
+saveRDS(regressor1,'regressor1.rds')
+saveRDS(regressor2,'regressor2')
+
+#===================================================Part 3 -------8/6/2020-----------
+
+MARDATE_10=FindJune_Howmany_Backward(Month=3,N=10,datelist=SETupdate5$Date,ifaddone = 0)
+MARDATE_05=FindJune_Howmany_Backward(Month=3,N=5,datelist=SETupdate5$Date,ifaddone = 0)
+SEPDATE_10=FindJune_Howmany_Backward(Month=9,N=10,datelist=SETupdate5$Date)
+SEPDATE_05=FindJune_Howmany_Backward(Month=9,N=5,datelist=SETupdate5$Date)
+DIV=c(258.2364945,
+      223.0606165,
+      203.2569545,
+      191.9618111,
+      174.7508693,
+      161.4132642,
+      221.1700558,
+      209.578816,
+      170.9319111,
+      133.2415261,
+      104.4098509,
+      90.5912904,
+      81.74881455,
+      87.70405578,
+      87.70455978,
+      79.6188997,
+      86.36129863,
+      91.20148898,
+      86.9324615
+)
+part3SET=SETupdate5
+part3SET$AVEDIV=0
+part3SET_05=APPENDIV(When = MARDATE_05,Main=part3SET,howmuch = DIV,N=5)
+part3SET_05=APPENDIV(When = SEPDATE_05,Main=part3SET_05,howmuch = DIV,N=5)
+#---------------------10
+part3SET_10=APPENDIV(When = MARDATE_10,Main=part3SET,howmuch = DIV,N=10)
+part3SET_10=APPENDIV(When = SEPDATE_10,Main=part3SET_10,howmuch = DIV,N=10)
+#-------
+part3SET_05$Divs=0
+part3SET_10$Divs=0
+#----------
+DIVSES_05=EXTRACTDIV(SERIES = part3SET_05)
+part3SET2_05=CrossDay(Main=part3SET_05,d=7,Start = part3SET_05$Date, End=part3SET_05$Maturity,Divdata=DIVSES_05,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+
+DIVSES_10=EXTRACTDIV(SERIES = part3SET_10)
+part3SET2_10=CrossDay(Main=part3SET_10,d=7,Start = part3SET_10$Date, End=part3SET_10$Maturity,Divdata=DIVSES_10,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+  
+part3SET2_05$AVEDIV=part3SET2_05$AVEDIV/10
+part3SET2_10$AVEDIV=part3SET2_10$AVEDIV/20
+
+part3SET3_05=COC2G(Main = part3SET2_05)
+part3SET3_10=COC2G(Main = part3SET2_10)
+  
+saveRDS(part3SET3_05,'part3 05.rds')
+saveRDS(part3SET3_10,'part3 10.rds')
+write.csv(part3SET3_05,file = "part3 05.csv",row.names=F)
+write.csv(part3SET3_10,file = "part3 10.csv",row.names=F) 
+#Add dummy from excel and reimport
+DUMMpart3_05<-read.csv("part3 05.csv", header=T, sep=",",encoding = "UTF-8") 
+DUMMpart3_10<-read.csv("part3 10.csv", header=T, sep=",",encoding = "UTF-8") 
+regressor05 = lm(MisCOC2 ~ Beta1+Beta2+Beta3+Beta4+Beta5+Beta6+Beta7+Beta8+Beta9+Beta10 ,data = DUMMpart3_05)
+regressor105 = lm(MisCOC2 ~ Beta1+Beta2+Beta3+Beta4+Beta5 ,data = DUMMpart3_05)
+regressor205 = lm(MisCOC2 ~ Beta6+Beta7+Beta8+Beta9+Beta10 ,data = DUMMpart3_05)
+
+regressor10 = lm(MisCOC2 ~ Beta1+Beta2+Beta3+Beta4+Beta5+Beta6+Beta7+Beta8+Beta9+Beta10+Beta11+Beta12+Beta13+Beta14+Beta15+Beta16+Beta17+Beta18+Beta19+Beta20 ,data = DUMMpart3_10)
+regressor110 = lm(MisCOC2 ~ Beta1+Beta2+Beta3+Beta4+Beta5+Beta6+Beta7+Beta8+Beta9+Beta10 ,data = DUMMpart3_10)
+regressor210 = lm(MisCOC2 ~ Beta11+Beta12+Beta13+Beta14+Beta15+Beta16+Beta17+Beta18+Beta19+Beta20 ,data = DUMMpart3_10)
+summary(regressor05)
+summary(regressor105)
+summary(regressor205)
+summary(regressor10)
+summary(regressor110)
+summary(regressor210)
+
+#-----------LOG-------------
+SETYEAR_05<-YEARFUN(DUMMpart3_05)
+MainSUM(SETYEAR_05)
+
+SETYEAR_10<-YEARFUN(DUMMpart3_10)
+MainSUM(SETYEAR_10)
+#----------------------------------------------Set dummay function
+#Set dummy funciton
+Setdummy<-function(Direction=1,Main=DUMMpart3_05,Judge=1,dateformat='%m/%d/%Y',whichmm=3,lastway=TRUE,Howmany=2,Newbeta='Newbeta1'){
+  for (l in (1:length(whichmm))) {
+  whichm = whichmm[l]
+  M = l - 1
+  if(lastway==TRUE){
+    S=ncol(Main)+1-M
+    Main[,S]=0
+    for (i in (1:nrow(Main))) {
+      if(i<=Howmany & Direction==1){
+        Main[i,S]=0
+      }else if(i>=nrow(Main)-Howmany & Direction==0){
+          Main[i,S]=0
+          }else if(month(as.Date(Main[i,Judge],dateformat))==whichm & month(as.Date(Main[i-Howmany,Judge],dateformat))==whichm){
+        Main[i,S]=1
+      }else{next}
+    }
+  }else if(lastway==FALSE){
+    next
+  }else{
+    print('Your lastway is not boolin type!!')
+  }
+  colnames(Main)[ncol(Main)]=Newbeta
+  }
+  return(Main)
+}
+#========================================Set dummy 4.1,2
+TRY=Setdummy()
+TRY3=Setdummy(Howmany = 3)
+DUM_05_EX_02=Setdummy(Direction=1,Main=TRY,Judge=1,dateformat='%m/%d/%Y',whichm=9,lastway=TRUE,Howmany=2,Newbeta='Newbeta1')
+DUM_05_EX_03=Setdummy(Direction=1,Main=TRY3,Judge=1,dateformat='%m/%d/%Y',whichm=9,lastway=TRUE,Howmany=3,Newbeta='Newbeta1')
+
+regressor_02 = lm(MisCOC1 ~ V28+V29 ,data = DUM_05_EX_02)
+
+regressor_03 = lm(MisCOC1 ~ V28+V29 ,data = DUM_05_EX_03)
+summary(regressor_02)
+summary(regressor_03)
+
+#========================================Model 5-1 & 2
+
+APPENDIV<-function(When=JUNEDATE,Main=tata,howmuch=DIV,N=3,excludelast=3){
+  S=0
+  
+  for (i in (1:nrow(Main))){
+    
+    for(j in (1:nrow(When))){
+      if(as.Date(Main[i,1],'%m/%d/%Y')==as.Date(When[j,1],'%Y-%m-%d')){
+        S=S+1
+        while(i+N+excludelast>nrow(Main)){N = N - 1}
+        for(k in (0:(N-1))){Main$AVEDIV[i+k+excludelast]=howmuch[S]}
+      }else{next}
+    }
+  }
+  return(Main)
+}
+#=================8/10========================5 model 4days
+setwd("C:\\Users\\Francis\\Desktop\\Nikkei")
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=10,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=10,datelist = SETupdate$Date)
+
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV,N=4,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV,N=4,excludelast = 3)
+
+View(SETupdate3)
+
+saveRDS(SETupdate3,'part5 SETupdate3.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate3,d=7,t=1)
+SETupdate4=CrossDay(Main=SETupdate3,d=7,Start = SETupdate3$Date, End=SETupdate3$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate4,'8m1dSETupdate4.rds')
+DIVR<-c(1.4798 #From 2014...
+        ,1.3692
+        ,1.9553
+        ,2.2703
+        ,1.7084
+        ,1.5305
+        ,2.4964
+        ,1.3691
+        ,0.9923
+        ,0.827
+        ,0.9088
+        ,0.8485
+        ,0.9529
+        ,0.8319
+        ,0.6362
+        ,0.4205
+        ,0.6239
+        ,0.5977
+        ,0.449)#To 1996 #7/24 update divdends data
+DIVR<-DIVR*0.01 # Convert to Percentage
+View(SETupdate4)
+
+SETupdate4$AVEDIV=SETupdate4$AVEDIV/8
+SETupdate5=RevisedCOC1(Divs=DIVR,Main=SETupdate4,T=1,R=4,FP=3,DU=10,S=2)
+saveRDS(SETupdate5,'8m1dSETupdate5.rds')
+SETupdate5=readRDS('8m1dSETupdate5.rds')
+SETupdate6=COC2G(Main=SETupdate5,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate6)
+SETYEAR2<-YEARFUN(SETupdate6)
+MainSUM(SETYEAR2)
+write.csv(SETupdate6,file = "part5 4 days correct version.csv")
+View(SETupdate5)
+part6day4=SETupdate6
+
+#============regresssion 8/10==========
+part6day3=Setdummy(Direction=1,Main=SETupdate6,Judge=1,dateformat='%m/%d/%Y',whichm=3,lastway=TRUE,Howmany=3,Newbeta='Newbeta1')
+part6day3=Setdummy(Direction=1,Main=part6day3,Judge=1,dateformat='%m/%d/%Y',whichm=9,lastway=TRUE,Howmany=3,Newbeta='Newbeta2')
+View(part6day3)
+regressor_part6d3= lm(MisCOC2 ~ Newbeta1+Newbeta2 ,data = part6day3)
+summary(regressor_part6d3)
+write.csv(part6day3,file = "part6 3 days.csv")
+#-------------
+part6day4=Setdummy(Direction=1,Main=part6day4,Judge=1,dateformat='%m/%d/%Y',whichm=3,lastway=TRUE,Howmany=3,Newbeta='Newbeta1')
+part6day4=Setdummy(Direction=1,Main=part6day4,Judge=1,dateformat='%m/%d/%Y',whichm=9,lastway=TRUE,Howmany=3,Newbeta='Newbeta2')
+View(part6day4)
+regressor_part6d4= lm(MisCOC2 ~ Newbeta1+Newbeta2 ,data = part6day4)
+summary(regressor_part6d4)
+write.csv(part6day4,file = "part6 4 days.csv")
+
+#=================8/10========================5 model 3days
+setwd("C:\\Users\\Francis\\Desktop\\Nikkei")
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=10,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=10,datelist = SETupdate$Date)
+
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV,N=3,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV,N=3,excludelast = 3)
+
+View(SETupdate3)
+
+saveRDS(SETupdate3,'part5 3days SETupdate3.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate3,d=7,t=1)
+SETupdate4=CrossDay(Main=SETupdate3,d=7,Start = SETupdate3$Date, End=SETupdate3$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate4,'part5 day38m1dSETupdate4.rds')
+DIVR<-c(1.4798 #From 2014...
+        ,1.3692
+        ,1.9553
+        ,2.2703
+        ,1.7084
+        ,1.5305
+        ,2.4964
+        ,1.3691
+        ,0.9923
+        ,0.827
+        ,0.9088
+        ,0.8485
+        ,0.9529
+        ,0.8319
+        ,0.6362
+        ,0.4205
+        ,0.6239
+        ,0.5977
+        ,0.449)#To 1996 #7/24 update divdends data
+DIVR<-DIVR*0.01 # Convert to Percentage
+View(SETupdate4)
+
+SETupdate4$AVEDIV=SETupdate4$AVEDIV/6
+SETupdate5=RevisedCOC1(Divs=DIVR,Main=SETupdate4,T=1,R=4,FP=3,DU=10,S=2)
+saveRDS(SETupdate5,'day 3 8m1dSETupdate5.rds')
+SETupdate5=readRDS('8m1dSETupdate5.rds')
+SETupdate6=COC2G(Main=SETupdate5,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate6)
+SETYEAR2<-YEARFUN(SETupdate6)
+MainSUM(SETYEAR2)
+write.csv(SETupdate6,file = "part5 3 days correct version.csv")
+View(SETupdate5)
+
+#================================== 8/16 part 8 ====================== 
+#3days
+DIV=c(258.2364945,
+      223.0606165,
+      203.2569545,
+      191.9618111,
+      174.7508693,
+      161.4132642,
+      221.1700558,
+      209.578816,
+      170.9319111,
+      133.2415261,
+      104.4098509,
+      90.5912904,
+      81.74881455,
+      87.70405578,
+      87.70455978,
+      79.6188997,
+      86.36129863,
+      91.20148898,
+      86.9324615
+)
+DIV_6_12=0.25*DIV
+DIV_3_9=0.75*DIV
+SET1=readRDS('8m1dSETupdate5.rds')
+
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=3,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=3,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+DECDATE<-FindJune_Howmany_Backward(Month = 12,N=3,datelist = SETupdate$Date)
+#1410 lines
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV_3_9/6,N=3,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV_3_9/6,N=3,excludelast = 3)
+SETupdate4=APPENDIV(When=JUNEDATE,Main=SETupdate3,howmuch=DIV_6_12/6,N=3,excludelast = 3)
+SETupdate5=APPENDIV(When=DECDATE,Main=SETupdate4,howmuch=DIV_6_12/6,N=3,excludelast = 3)
+
+View(SETupdate5)
+
+saveRDS(SETupdate5,'part8 SETupdate5.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate5,d=7,t=1)
+SETupdate6=CrossDay(Main=SETupdate5,d=7,Start = SETupdate5$Date, End=SETupdate5$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate6,'part8 cross day.rds')
+DIVR<-c(1.4798 #From 2014...
+        ,1.3692
+        ,1.9553
+        ,2.2703
+        ,1.7084
+        ,1.5305
+        ,2.4964
+        ,1.3691
+        ,0.9923
+        ,0.827
+        ,0.9088
+        ,0.8485
+        ,0.9529
+        ,0.8319
+        ,0.6362
+        ,0.4205
+        ,0.6239
+        ,0.5977
+        ,0.449)#To 1996 #7/24 update divdends data
+DIVR<-DIVR*0.01 # Convert to Percentage
+View(SETupdate6)
+
+
+SETupdate5=RevisedCOC1(Divs=DIVR,Main=SETupdate4,T=1,R=4,FP=3,DU=10,S=2)
+saveRDS(SETupdate5,'8m1dSETupdate5.rds')
+SETupdate5=readRDS('8m1dSETupdate5.rds')
+
+SETupdate7=COC2G(Main=SETupdate6,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate7)
+SETYEAR2<-YEARFUN(SETupdate7)
+MainSUM(SETYEAR2)
+write.csv(SETupdate7,file = "part8 3 days correct version.csv")
+
+Part8day3=Setdummy(Direction=1,Main=SETupdate7,Judge=1,dateformat='%m/%d/%Y',whichmm=c(3),lastway=TRUE,Howmany=3,Newbeta='beta3and9')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta6&12')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=c(9),lastway=TRUE,Howmany=3,Newbeta='beta6and12')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta6&12')
+
+View(Part8day3)
+regressor_part8d3= lm(MisCOC2 ~ beta3+beta6+beta9+beta12 ,data = Part8day3)
+summary(regressor_part8d3)
+
+regressor_part8d3= lm(MisCOC2 ~ beta3and9+beta6and12 ,data = Part8day3)
+summary(regressor_part8d3)
+#day4================================================
+
+SET1=readRDS('8m1dSETupdate5.rds')
+
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=3,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=3,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+DECDATE<-FindJune_Howmany_Backward(Month = 12,N=3,datelist = SETupdate$Date)
+#1410 lines
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV_3_9/8,N=4,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV_3_9/8,N=4,excludelast = 3)
+SETupdate4=APPENDIV(When=JUNEDATE,Main=SETupdate3,howmuch=DIV_6_12/8,N=4,excludelast = 3)
+SETupdate5=APPENDIV(When=DECDATE,Main=SETupdate4,howmuch=DIV_6_12/8,N=4,excludelast = 3)
+
+View(SETupdate5)
+
+saveRDS(SETupdate5,'part8 day4 SETupdate5.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate5,d=7,t=1)
+SETupdate6=CrossDay(Main=SETupdate5,d=7,Start = SETupdate5$Date, End=SETupdate5$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate6,'part8 days4 cross day.rds')
+
+View(SETupdate6)
+
+SETupdate7=COC2G(Main=SETupdate6,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate7)
+SETYEAR2<-YEARFUN(SETupdate7)
+MainSUM(SETYEAR2)
+write.csv(SETupdate7,file = "part8 4 days correct version.csv")
+
+Part8day4=Setdummy(Direction=1,Main=SETupdate7,Judge=1,dateformat='%m/%d/%Y',whichm=c(6),lastway=TRUE,Howmany=3,Newbeta='beta3and9')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta6')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=c(12),lastway=TRUE,Howmany=3,Newbeta='beta6and12')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta12')
+
+View(Part8day4)
+regressor_part8d4= lm(MisCOC2 ~ beta3+beta6+beta9+beta12 ,data = Part8day4)
+summary(regressor_part8d4)
+
+regressor_part8d4= lm(MisCOC2 ~ beta3and9+beta6and12 ,data = Part8day4)
+summary(regressor_part8d4)
+#=================================================== part 7 regression 
+#================================== 8/30 part 8 80% 20% test ====================== 
+#3days
+DIV=c(258.2364945,
+      223.0606165,
+      203.2569545,
+      191.9618111,
+      174.7508693,
+      161.4132642,
+      221.1700558,
+      209.578816,
+      170.9319111,
+      133.2415261,
+      104.4098509,
+      90.5912904,
+      81.74881455,
+      87.70405578,
+      87.70455978,
+      79.6188997,
+      86.36129863,
+      91.20148898,
+      86.9324615
+)
+DIV_6_12=0.20*DIV
+DIV_3_9=0.80*DIV
+SET1=readRDS('8m1dSETupdate5.rds')
+
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=3,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=3,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+DECDATE<-FindJune_Howmany_Backward(Month = 12,N=3,datelist = SETupdate$Date)
+#1410 lines
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV_3_9/6,N=3,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV_3_9/6,N=3,excludelast = 3)
+SETupdate4=APPENDIV(When=JUNEDATE,Main=SETupdate3,howmuch=DIV_6_12/6,N=3,excludelast = 3)
+SETupdate5=APPENDIV(When=DECDATE,Main=SETupdate4,howmuch=DIV_6_12/6,N=3,excludelast = 3)
+
+View(SETupdate5)
+
+saveRDS(SETupdate5,'part8 test 80 20 SETupdate5.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate5,d=7,t=1)
+SETupdate6=CrossDay(Main=SETupdate5,d=7,Start = SETupdate5$Date, End=SETupdate5$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate6,'part8 80 20 cross day.rds')
+DIVR<-c(1.4798 #From 2014...
+        ,1.3692
+        ,1.9553
+        ,2.2703
+        ,1.7084
+        ,1.5305
+        ,2.4964
+        ,1.3691
+        ,0.9923
+        ,0.827
+        ,0.9088
+        ,0.8485
+        ,0.9529
+        ,0.8319
+        ,0.6362
+        ,0.4205
+        ,0.6239
+        ,0.5977
+        ,0.449)#To 1996 #7/24 update divdends data
+DIVR<-DIVR*0.01 # Convert to Percentage
+View(SETupdate6)
+
+
+SETupdate5=RevisedCOC1(Divs=DIVR,Main=SETupdate4,T=1,R=4,FP=3,DU=10,S=2)
+saveRDS(SETupdate5,'8m1dSETupdate5.rds')
+SETupdate5=readRDS('8m1dSETupdate5.rds')
+
+SETupdate7=COC2G(Main=SETupdate6,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate7)
+SETYEAR2<-YEARFUN(SETupdate7)
+MainSUM(SETYEAR2)
+write.csv(SETupdate7,file = "part8 3 days correct version.csv")
+
+Part8day3=Setdummy(Direction=1,Main=SETupdate7,Judge=1,dateformat='%m/%d/%Y',whichmm=c(3),lastway=TRUE,Howmany=3,Newbeta='beta3')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta6')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=c(9),lastway=TRUE,Howmany=3,Newbeta='beta9')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta12')
+
+View(Part8day3)
+regressor_part8d3= lm(MisCOC2 ~ beta3+beta6+beta9+beta12 ,data = Part8day3)
+summary(regressor_part8d3)
+
+regressor_part8d3= lm(MisCOC2 ~ beta3and9+beta6and12 ,data = Part8day3)
+summary(regressor_part8d3)
+#day4================================================
+
+SET1=readRDS('8m1dSETupdate5.rds')
+
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=3,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=3,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+DECDATE<-FindJune_Howmany_Backward(Month = 12,N=3,datelist = SETupdate$Date)
+#1410 lines
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV_3_9/8,N=4,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV_3_9/8,N=4,excludelast = 3)
+SETupdate4=APPENDIV(When=JUNEDATE,Main=SETupdate3,howmuch=DIV_6_12/8,N=4,excludelast = 3)
+SETupdate5=APPENDIV(When=DECDATE,Main=SETupdate4,howmuch=DIV_6_12/8,N=4,excludelast = 3)
+
+View(SETupdate5)
+
+saveRDS(SETupdate5,'part8 day4 80 20 SETupdate5.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate5,d=7,t=1)
+SETupdate6=CrossDay(Main=SETupdate5,d=7,Start = SETupdate5$Date, End=SETupdate5$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate6,'part8 days4 80 20 cross day.rds')
+
+View(SETupdate6)
+
+SETupdate7=COC2G(Main=SETupdate6,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate7)
+SETYEAR2<-YEARFUN(SETupdate7)
+MainSUM(SETYEAR2)
+write.csv(SETupdate7,file = "part8 4 days correct version.csv")
+
+Part8day4=Setdummy(Direction=1,Main=SETupdate7,Judge=1,dateformat='%m/%d/%Y',whichm=c(3),lastway=TRUE,Howmany=3,Newbeta='beta3')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta6')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=c(9),lastway=TRUE,Howmany=3,Newbeta='beta9')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta12')
+
+View(Part8day4)
+regressor_part8d4= lm(MisCOC2 ~ beta3+beta6+beta9+beta12 ,data = Part8day4)
+summary(regressor_part8d4)
+
+regressor_part8d4= lm(MisCOC2 ~ beta3and9+beta6and12 ,data = Part8day4)
+summary(regressor_part8d4)
+#================================== 8/30 part 8 85% 15% test ====================== 
+#3days
+DIV=c(258.2364945,
+      223.0606165,
+      203.2569545,
+      191.9618111,
+      174.7508693,
+      161.4132642,
+      221.1700558,
+      209.578816,
+      170.9319111,
+      133.2415261,
+      104.4098509,
+      90.5912904,
+      81.74881455,
+      87.70405578,
+      87.70455978,
+      79.6188997,
+      86.36129863,
+      91.20148898,
+      86.9324615
+)
+DIV_6_12=0.15*DIV
+DIV_3_9=0.85*DIV
+SET1=readRDS('8m1dSETupdate5.rds')
+
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=3,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=3,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+DECDATE<-FindJune_Howmany_Backward(Month = 12,N=3,datelist = SETupdate$Date)
+#1410 lines
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV_3_9/6,N=3,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV_3_9/6,N=3,excludelast = 3)
+SETupdate4=APPENDIV(When=JUNEDATE,Main=SETupdate3,howmuch=DIV_6_12/6,N=3,excludelast = 3)
+SETupdate5=APPENDIV(When=DECDATE,Main=SETupdate4,howmuch=DIV_6_12/6,N=3,excludelast = 3)
+
+View(SETupdate5)
+
+saveRDS(SETupdate5,'part8 test 80 20 SETupdate5.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate5,d=7,t=1)
+SETupdate6=CrossDay(Main=SETupdate5,d=7,Start = SETupdate5$Date, End=SETupdate5$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate6,'part8 85 15 cross day.rds')
+DIVR<-c(1.4798 #From 2014...
+        ,1.3692
+        ,1.9553
+        ,2.2703
+        ,1.7084
+        ,1.5305
+        ,2.4964
+        ,1.3691
+        ,0.9923
+        ,0.827
+        ,0.9088
+        ,0.8485
+        ,0.9529
+        ,0.8319
+        ,0.6362
+        ,0.4205
+        ,0.6239
+        ,0.5977
+        ,0.449)#To 1996 #7/24 update divdends data
+DIVR<-DIVR*0.01 # Convert to Percentage
+View(SETupdate6)
+
+
+SETupdate5=RevisedCOC1(Divs=DIVR,Main=SETupdate4,T=1,R=4,FP=3,DU=10,S=2)
+saveRDS(SETupdate5,'8m1dSETupdate5.rds')
+SETupdate5=readRDS('8m1dSETupdate5.rds')
+
+SETupdate7=COC2G(Main=SETupdate6,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate7)
+SETYEAR2<-YEARFUN(SETupdate7)
+MainSUM(SETYEAR2)
+write.csv(SETupdate7,file = "part8 3 days correct version.csv")
+
+Part8day3=Setdummy(Direction=1,Main=SETupdate7,Judge=1,dateformat='%m/%d/%Y',whichmm=c(3,9),lastway=TRUE,Howmany=3,Newbeta='beta3and9')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta6')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=c(6,12),lastway=TRUE,Howmany=3,Newbeta='beta6and12')
+Part8day3=Setdummy(Direction=1,Main=Part8day3,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta12')
+
+View(Part8day3)
+regressor_part8d3= lm(MisCOC2 ~ beta3+beta6+beta9+beta12 ,data = Part8day3)
+summary(regressor_part8d3)
+
+regressor_part8d3= lm(MisCOC2 ~ beta3and9+beta6and12 ,data = Part8day3)
+summary(regressor_part8d3)
+#day4================================================
+
+SET1=readRDS('8m1dSETupdate5.rds')
+
+SETupdate=DCF(maindata=SET1) # which is basis on 30/365
+SETupdate$Divs=0
+SETupdate$AVEDIV=0
+
+SEPDATE<-FindJune_Howmany_Backward(Month = 9,N=3,datelist = SETupdate$Date)
+MARDATE<-FindJune_Howmany_Backward(Month = 3,N=3,datelist = SETupdate$Date)
+JUNEDATE<-FindJune_Howmany_Backward(Month = 6,N=3,datelist = SETupdate$Date)
+DECDATE<-FindJune_Howmany_Backward(Month = 12,N=3,datelist = SETupdate$Date)
+#1410 lines
+SETupdate2=APPENDIV(When=SEPDATE,Main=SETupdate,howmuch=DIV_3_9/8,N=4,excludelast = 3)
+SETupdate3=APPENDIV(When=MARDATE,Main=SETupdate2,howmuch=DIV_3_9/8,N=4,excludelast = 3)
+SETupdate4=APPENDIV(When=JUNEDATE,Main=SETupdate3,howmuch=DIV_6_12/8,N=4,excludelast = 3)
+SETupdate5=APPENDIV(When=DECDATE,Main=SETupdate4,howmuch=DIV_6_12/8,N=4,excludelast = 3)
+
+View(SETupdate5)
+
+saveRDS(SETupdate5,'part8 day4 85 15 SETupdate5.rds')
+DIVSES=EXTRACTDIV(SERIES=SETupdate5,d=7,t=1)
+SETupdate6=CrossDay(Main=SETupdate5,d=7,Start = SETupdate5$Date, End=SETupdate5$Maturity,Divdata=DIVSES,startformat='%m/%d/%Y',endformat='%Y-%m-%d',Divformat='%m/%d/%Y')
+saveRDS(SETupdate6,'part8 days4 85 15 cross day.rds')
+
+View(SETupdate6)
+
+SETupdate7=COC2G(Main=SETupdate6,Divs=9,AVEDIV=7,Ma=8,rf=4,Fu=3,S=2,DF=10,T=1)
+View(SETupdate7)
+SETYEAR2<-YEARFUN(SETupdate7)
+MainSUM(SETYEAR2)
+write.csv(SETupdate7,file = "part8 4 days correct version.csv")
+
+Part8day4=Setdummy(Direction=1,Main=SETupdate7,Judge=1,dateformat='%m/%d/%Y',whichm=c(3,9),lastway=TRUE,Howmany=3,Newbeta='beta3and9')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=6,lastway=TRUE,Howmany=3,Newbeta='beta6')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=c(6,12),lastway=TRUE,Howmany=3,Newbeta='beta6and12')
+Part8day4=Setdummy(Direction=1,Main=Part8day4,Judge=1,dateformat='%m/%d/%Y',whichm=12,lastway=TRUE,Howmany=3,Newbeta='beta12')
+
+View(Part8day4)
+regressor_part8d4= lm(MisCOC2 ~ beta3+beta6+beta9+beta12 ,data = Part8day4)
+summary(regressor_part8d4)
+
+regressor_part8d4= lm(MisCOC2 ~ beta3and9+beta6and12 ,data = Part8day4)
+summary(regressor_part8d4)
